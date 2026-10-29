@@ -1437,6 +1437,11 @@ html[data-ambientlight-enabled] {
     display: none;
   }
 
+  .ambientlight__projectors {
+    transform: translateX(var(--ytal-audio-pan, 0%)) scale(var(--ytal-audio-scale, 1));
+    transform-origin: center;
+  }
+
   .ambientlight__projector {
     contain: strict;
     background: none; //Prevent black canvas edge lines on Firefox

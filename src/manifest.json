@@ -38,7 +38,25 @@
         "https://www.youtube.com/embed/*"
       ],
       "js": [
-        "scripts/content.js"
+        "scripts/injected.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "exclude_matches": [
+        "https://www.youtube.com/live_chat*",
+        "https://www.youtube.com/embed/*"
+      ],
+      "css": [
+        "styles/content.css"
+      ],
+      "js": [
+        "scripts/content.js",
+        "scripts/content-main.js"
       ],
       "run_at": "document_start"
     },
@@ -47,7 +65,22 @@
         "https://www.youtube.com/embed/*"
       ],
       "js": [
-        "scripts/content.js"
+        "scripts/injected.js"
+      ],
+      "world": "MAIN",
+      "all_frames": true,
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/embed/*"
+      ],
+      "css": [
+        "styles/content.css"
+      ],
+      "js": [
+        "scripts/content.js",
+        "scripts/content-main.js"
       ],
       "all_frames": true,
       "run_at": "document_start"
@@ -72,16 +105,13 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "styles/content.css",
-        "scripts/content-main.js",
-        "scripts/injected.js",
         "images/noise-1.png",
         "images/noise-2.png",
         "images/noise-3.png",
         "images/donate.svg"
       ],
       "matches": [
-        "https://www.youtube.com/*"
+        "<all_urls>"
       ]
     }
   ],
@@ -90,6 +120,9 @@
     "open_in_tab": false
   },
   "permissions": [
-    "storage"
+    "storage",
+    "tabCapture",
+    "offscreen",
+    "activeTab"
   ]
 }

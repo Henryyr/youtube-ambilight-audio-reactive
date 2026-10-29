@@ -47,6 +47,8 @@ import Stats from './stats';
 import { getBrowser } from './utils';
 import { injectedScript } from './messaging/injected';
 import { getNodeTreeString, getPageElems } from './errors/dom';
+import AudioReactive, { modulation } from './audio-reactive';
+import { audioVisuals } from './audio-modulation';
 
 const baseUrl = chrome.runtime.getURL('') || ''; // document.currentScript?.getAttribute('data-base-url') || ''
 
@@ -125,6 +127,14 @@ export default class Ambientlight {
       this.stats.initElems();
 
       this.initStyles();
+      this.audioReactive = new AudioReactive((detail) => {
+        const audio = detail && typeof detail === 'object' ? detail : { level: detail };
+        this.audioLevel = Number.isFinite(audio.level) ? audio.level : 0;
+        this.audioLeft = Number.isFinite(audio.left) ? audio.left : this.audioLevel;
+        this.audioRight = Number.isFinite(audio.right) ? audio.right : this.audioLevel;
+        this.updateSizes().catch(() => {});
+      });
+      this.audioReactive.start();
       this.updateStyles();
 
       this.checkGetImageDataAllowed();
@@ -551,6 +561,8 @@ export default class Ambientlight {
     //////
 
     this.videoListeners = this.videoListeners || {
+      play: () => this.setAudioPlayback(true),
+      pause: () => this.setAudioPlayback(false),
       seeked: async () => {
         if (!this.settings.enabled || !this.isOnVideoPage) return;
 
@@ -621,6 +633,7 @@ export default class Ambientlight {
         await this.optionalFrame();
       },
       ended: () => {
+        this.setAudioPlayback(false);
         if (!this.settings.enabled || !this.isOnVideoPage) return;
         if (this.clearTime < performance.now() - 500) this.clear();
         this.stats.hide();
@@ -709,6 +722,31 @@ Video ready state: ${readyStateToString(videoElem?.readyState)}`);
     this.applyChromiumBug1142112Workaround();
     this.applyChromiumBugVideoJitterWorkaround();
   }
+
+  updateAudioVisuals = () => {
+    if (!this.projectorsElem) return;
+    const visual = audioVisuals({
+      level: this.audioLevel,
+      left: this.audioLeft,
+      right: this.audioRight,
+    });
+    this.projectorsElem.style.setProperty('--ytal-audio-scale', String(visual.scale));
+    this.projectorsElem.style.setProperty('--ytal-audio-pan', `${visual.pan}%`);
+    this.projectorsElem.style.filter = `brightness(${visual.brightness}) blur(${visual.blur}px)`;
+    this.projectorsElem.style.opacity = String(visual.opacity);
+  };
+
+  setAudioPlayback = (playing) => {
+    if (!this.settings.audioReactive) return;
+    chrome.runtime.sendMessage({ type: 'audio-reactive-playback', paused: !playing }).catch(() => {});
+    if (!playing) {
+      this.audioLevel = 0;
+      this.audioLeft = 0;
+      this.audioRight = 0;
+      this.updateAudioVisuals();
+      this.updateSizes().catch(() => {});
+    }
+  };
 
   handleVideoError = () => {
     this.handleVideoErrorTimeout = undefined;
@@ -1948,8 +1986,9 @@ Video ready state: ${readyStateToString(videoElem?.readyState)}`);
       this.settings.contrast +
       (this.isHdr ? this.settings.hdrContrast - 100 : 0);
     const brightness =
-      this.settings.brightness +
-      (this.isHdr ? this.settings.hdrBrightness - 100 : 0);
+      (this.settings.brightness +
+        (this.isHdr ? this.settings.hdrBrightness - 100 : 0)) *
+      (this.settings.audioReactive ? modulation(this.audioLevel || 0, 120) / 100 : 1);
     const saturation =
       this.settings.saturation +
       (this.isHdr ? this.settings.hdrSaturation - 100 : 0);
@@ -3551,6 +3590,8 @@ Video ready state: ${readyStateToString(videoElem?.readyState)}`);
   }
 
   async enable(initial = false) {
+    if (this.settings.audioReactive && !this.audioReactive?.running)
+      this.audioReactive?.start();
     if (!initial) {
       this.settings.set('enabled', true, true);
     }
@@ -3618,6 +3659,7 @@ Video ready state: ${readyStateToString(videoElem?.readyState)}`);
   // }
 
   async disable() {
+    this.audioReactive?.stop();
     if (this.pendingStart) return;
     this.settings.set('enabled', false, true);
 

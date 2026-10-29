@@ -15,7 +15,7 @@
   "type": "module",
   "scripts": {
     "build:manifest": "node manifest-copy.js",
-    "build:html": "copyfiles -u 1 src/options.html dist",
+    "build:html": "copyfiles -u 1 src/options.html src/offscreen.html dist",
     "build:images": "copyfiles -u 2 src/images/* dist/images",
     "build:styles:content": "sass --no-source-map src/styles/content.scss dist/styles/content.css",
     "build:styles:live-chat": "sass --no-source-map src/styles/live-chat.scss dist/styles/live-chat.css",
@@ -27,6 +27,9 @@
     "build:scripts:sourcemaps": "run-s build:scripts:sourcemaps:inject build:scripts:sourcemaps:copy",
     "build:scripts": "run-s build:scripts:rollup build:scripts:sourcemaps",
     "build": "run-s build:scripts build:styles build:manifest build:html build:images",
+    "start:dev": "run-p dev:scripts dev:styles",
+    "dev:scripts": "rollup -c --watch",
+    "dev:styles": "run-p --silent build:styles:content build:styles:live-chat build:styles:options",
     "upload-sourcemaps": "dotenvx run -f .env -f .env.local --overload -- sentry-cli sourcemaps upload ./sourcemaps --release=2.38.17"
   },
   "engines": {

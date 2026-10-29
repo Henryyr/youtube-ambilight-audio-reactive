@@ -1100,6 +1100,7 @@ But if this happens frequently, here are some possible causes:
 
           if (
             [
+              'audioReactive',
               'energySaver',
               'videoOverlayEnabled',
               'frameBlending',
@@ -1874,6 +1875,10 @@ But if this happens frequently, here are some possible causes:
 
     const changed = this[name] !== value;
     this[name] = value;
+    if (name === 'audioReactive' && this.ambientlight?.audioReactive) {
+      if (value) this.ambientlight.audioReactive.start();
+      else this.ambientlight.audioReactive.stop();
+    }
 
     // Migrated to blur2
     if (name === 'blur') value = Math.round((value - 30) * 10) / 10; // Prevent rounding error

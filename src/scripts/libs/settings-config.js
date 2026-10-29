@@ -124,6 +124,15 @@ const SettingsConfig = [
     advanced: true,
   },
   {
+    name: 'audioReactive',
+    label: 'Audio reactive ambient light',
+    description: 'Uses the video audio when supported by this browser',
+    type: 'checkbox',
+    default: true,
+    experimental: true,
+    advanced: true,
+  },
+  {
     name: 'prioritizePageLoadSpeed',
     label: 'Prioritize page load speed',
     description: 'Loads the ambient light after the page has loaded',

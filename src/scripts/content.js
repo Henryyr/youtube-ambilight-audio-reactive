@@ -14,6 +14,16 @@ import { injectedScript } from './libs/messaging/injected';
 
 setErrorHandler((ex) => SentryReporter.captureException(ex));
 
+// Relay audio-reactive-level from background to content-main (which runs in page context)
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === 'audio-reactive-level') {
+    document.dispatchEvent(new CustomEvent('ytal-audio-level', { detail: message }));
+  } else if (message?.type === 'audio-reactive-status') {
+    document.dispatchEvent(new CustomEvent('ytal-audio-status', { detail: message.active }));
+  }
+});
+
+
 injectedScript.addMessageListener('error', (injectedEx) => {
   const ex = new Error(injectedEx.message);
   ex.name = injectedEx.name;
@@ -86,51 +96,6 @@ const waitForHeadElement = async () => {
   });
 };
 
-const captureResourceLoadingException = async (url, event) => {
-  if (!chrome?.runtime?.id) {
-    setResourceWarning();
-    return;
-  }
-
-  let error;
-  try {
-    const stack = new Error().stack;
-    await new Promise((resolve, reject) => {
-      try {
-        const req = new XMLHttpRequest();
-        req.onreadystatechange = () => {
-          try {
-            if (req.readyState == XMLHttpRequest.DONE) {
-              if (req.status !== 200) {
-                error = new Error(
-                  `Cannot load ${url} (Status: ${req.statusText} ${req.status})`
-                );
-                appendErrorStack(stack, error);
-              }
-              resolve();
-            }
-          } catch (ex) {
-            reject(ex);
-          }
-        };
-        req.open('GET', url, true);
-        req.send();
-      } catch (ex) {
-        appendErrorStack(stack, ex);
-        reject(ex);
-      }
-    });
-  } catch (ex) {
-    error = ex;
-  } finally {
-    if (error) {
-      error.details = event;
-      SentryReporter.captureException(error);
-    }
-
-    setResourceWarning(url);
-  }
-};
 
 wrapErrorHandler(async function loadContentScript() {
   const version = getVersion();
@@ -172,92 +137,6 @@ wrapErrorHandler(async function loadContentScript() {
     return;
   }
 
-  let loaded = await new Promise((resolve) => {
-    let url;
-    try {
-      url = chrome.runtime.getURL('styles/content.css');
-    } catch {
-      setResourceWarning();
-      resolve(false);
-      return;
-    }
-
-    if (document.head.querySelector(`link[href="${url}"]`)) {
-      resolve(true);
-      return;
-    }
-
-    const style = document.createElement('link');
-    style.href = url;
-    style.rel = 'stylesheet';
-    style.addEventListener(
-      'error',
-      async function injectStyleOnError(event) {
-        await captureResourceLoadingException(style.href, event);
-        resolve(false);
-      }.bind(this)
-    );
-    style.addEventListener(
-      'load',
-      function injectStyleOnLoad() {
-        resolve(true);
-      }.bind(this)
-    );
-    document.head.appendChild(style);
-  });
-  if (!chrome?.runtime?.id) {
-    setResourceWarning();
-    return;
-  }
+  let loaded = true;
   if (!loaded) return;
-
-  loaded = await new Promise((resolve) => {
-    let url;
-    try {
-      url = chrome.runtime.getURL('scripts/injected.js');
-    } catch {
-      setResourceWarning();
-      resolve(false);
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = url;
-    script.async = true;
-    script.setAttribute('data-crash-options', JSON.stringify(crashOptions));
-    script.setAttribute('data-version', version);
-    script.addEventListener(
-      'error',
-      async function injectScriptOnError(event) {
-        await captureResourceLoadingException(script.src, event);
-        resolve(false);
-      }.bind(this)
-    );
-    script.addEventListener(
-      'load',
-      function injectStyleOnLoad() {
-        resolve(true);
-      }.bind(this)
-    );
-    document.head.appendChild(script);
-  });
-  if (!chrome?.runtime?.id) {
-    setResourceWarning();
-    return;
-  }
-  if (!loaded) return;
-
-  let scriptUrl;
-  try {
-    scriptUrl = chrome.runtime.getURL('scripts/content-main.js');
-  } catch {
-    setResourceWarning();
-    return;
-  }
-
-  try {
-    await import(scriptUrl);
-  } catch (error) {
-    await captureResourceLoadingException(scriptUrl, error);
-  }
 })();

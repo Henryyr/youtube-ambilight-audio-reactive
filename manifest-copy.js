@@ -1,13 +1,11 @@
-import { copyFileSync, mkdirSync, existsSync } from 'fs';
-import { replaceInFileSync } from 'replace-in-file';
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import packageJson from './package.json' with { type: 'json' };
-
-const options = {
-  files: 'dist/manifest.json',
-  from: /"version": "0.0.0"/g,
-  to: `"version": "${packageJson.version}"`,
-}
-
-if(!existsSync('dist')) mkdirSync('dist');
-copyFileSync('src/manifest.json', options.files);
-replaceInFileSync(options);
+const manifest = JSON.parse(readFileSync('src/manifest.json', 'utf8'));
+manifest.version = packageJson.version;
+mkdirSync('dist', { recursive: true });
+manifest.web_accessible_resources[0].matches = ['<all_urls>'];
+writeFileSync('dist/manifest.json', JSON.stringify(manifest, null, 2));
+manifest.permissions = ['storage'];
+manifest.background = { scripts: ['scripts/background.js'] };
+delete manifest.minimum_chrome_version;
+writeFileSync('dist/manifest.firefox.json', JSON.stringify(manifest, null, 2));

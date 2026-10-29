@@ -7,6 +7,52 @@ import { on } from './libs/generic';
 document.querySelector('#feedbackFormLink').href = getFeedbackFormLink();
 document.querySelector('#privacyPolicyLink').href = getPrivacyPolicyLink();
 
+const captureStart = document.querySelector('#startAudioCaptureBtn');
+const captureStop = document.querySelector('#stopAudioCaptureBtn');
+const captureStatus = document.querySelector('#audioCaptureStatus');
+if (!chrome?.tabCapture?.getMediaStreamId || !chrome?.offscreen?.createDocument) {
+  captureStart.disabled = true;
+  captureStatus.textContent = 'Audio capture is unsupported in this browser. Use a Chromium browser with tabCapture and offscreen-document support.';
+} else {
+  const syncCaptureState = async () => {
+    const state = await chrome.runtime.sendMessage({ type: 'audio-reactive-status' });
+    const active = state?.active === true;
+    captureStart.hidden = active;
+    captureStart.disabled = false;
+    captureStop.hidden = !active;
+    captureStatus.textContent = active
+      ? 'Capturing audio levels. Playback remains audible.'
+      : 'Capture starts only when you choose it. Audio is analyzed locally, never recorded.';
+  };
+  syncCaptureState().catch((error) => {
+    console.error('[audio-reactive] status failed', error);
+    captureStatus.textContent = `Capture status unavailable: ${error.message}`;
+  });
+  captureStart.addEventListener('click', async () => {
+    captureStart.disabled = true;
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id || !/^https:\/\/www\.youtube\.com\/(watch|embed\/)/.test(tab.url || '')) throw new Error('Open a YouTube watch or embed tab first.');
+      const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
+      const result = await chrome.runtime.sendMessage({ type: 'audio-reactive-start', tabId: tab.id, streamId });
+      if (result?.error) throw new Error(result.error);
+      captureStart.hidden = true;
+      captureStop.hidden = false;
+      captureStatus.textContent = 'Capturing audio levels. Playback remains audible.';
+    } catch (error) {
+      captureStatus.textContent = error.message || 'Unable to start audio capture.';
+      captureStart.disabled = false;
+    }
+  });
+  captureStop.addEventListener('click', async () => {
+    await chrome.runtime.sendMessage({ type: 'audio-reactive-stop' });
+    captureStart.disabled = false;
+    captureStart.hidden = false;
+    captureStop.hidden = true;
+    captureStatus.textContent = 'Audio capture stopped.';
+  });
+}
+
 let crashOptions;
 
 const updateCrashReportOptions = () => {
