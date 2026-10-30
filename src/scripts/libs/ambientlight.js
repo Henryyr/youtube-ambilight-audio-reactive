@@ -47,8 +47,8 @@ import Stats from './stats';
 import { getBrowser } from './utils';
 import { injectedScript } from './messaging/injected';
 import { getNodeTreeString, getPageElems } from './errors/dom';
-import AudioReactive, { modulation } from './audio-reactive';
-import { audioVisuals } from './audio-modulation';
+import AudioReactive from './audio-reactive';
+import { audioVisuals, sampleEdgeColors } from './audio-modulation';
 
 const baseUrl = chrome.runtime.getURL('') || ''; // document.currentScript?.getAttribute('data-base-url') || ''
 
@@ -132,8 +132,17 @@ export default class Ambientlight {
         this.audioLevel = Number.isFinite(audio.level) ? audio.level : 0;
         this.audioLeft = Number.isFinite(audio.left) ? audio.left : this.audioLevel;
         this.audioRight = Number.isFinite(audio.right) ? audio.right : this.audioLevel;
-        this.updateSizes().catch(() => {});
-      });
+        this.audioBass = Number.isFinite(audio.bass) ? audio.bass : 0;
+        this.audioMid = Number.isFinite(audio.mid) ? audio.mid : 0;
+        this.audioTreble = Number.isFinite(audio.treble) ? audio.treble : 0;
+        this.audioLeftBass = Number.isFinite(audio.leftBass) ? audio.leftBass : this.audioBass;
+        this.audioRightBass = Number.isFinite(audio.rightBass) ? audio.rightBass : this.audioBass;
+        this.audioLeftTreble = Number.isFinite(audio.leftTreble) ? audio.leftTreble : this.audioTreble;
+        this.audioRightTreble = Number.isFinite(audio.rightTreble) ? audio.rightTreble : this.audioTreble;
+        this.audioCorrelation = Number.isFinite(audio.correlation) ? audio.correlation : 1;
+        this.audioTransient = Number.isFinite(audio.transient) ? audio.transient : 0;
+        this.updateAudioVisuals();
+      }, () => this.videoElem);
       this.audioReactive.start();
       this.updateStyles();
 
@@ -462,6 +471,8 @@ export default class Ambientlight {
     }
 
     this.lastVideoElemSrc = this.videoElem.src;
+    this.audioColorSampleBlocked = false;
+    this.audioGlowColors = {};
     await this.start();
 
     return true;
@@ -724,16 +735,138 @@ Video ready state: ${readyStateToString(videoElem?.readyState)}`);
   }
 
   updateAudioVisuals = () => {
-    if (!this.projectorsElem) return;
-    const visual = audioVisuals({
-      level: this.audioLevel,
-      left: this.audioLeft,
-      right: this.audioRight,
-    });
-    this.projectorsElem.style.setProperty('--ytal-audio-scale', String(visual.scale));
-    this.projectorsElem.style.setProperty('--ytal-audio-pan', `${visual.pan}%`);
-    this.projectorsElem.style.filter = `brightness(${visual.brightness}) blur(${visual.blur}px)`;
-    this.projectorsElem.style.opacity = String(visual.opacity);
+    if (!this.audioGlowElems) return;
+    if (
+      !this.settings.audioReactive ||
+      !this.settings.enabled ||
+      document.visibilityState !== 'visible' ||
+      this.isHidden ||
+      this.videoIsHidden ||
+      !this.videoElem ||
+      this.videoElem.paused ||
+      this.videoElem.ended ||
+      this.videoElem.seeking ||
+      this.videoElem.readyState < 2
+    ) {
+      this.clearAudioVisuals();
+      return;
+    }
+    const level = Math.min(1, Math.max(0, Number(this.audioLevel) || 0));
+    const leftLevel = Math.min(1, Math.max(0, Number(this.audioLeft) || 0));
+    const rightLevel = Math.min(1, Math.max(0, Number(this.audioRight) || 0));
+    const bass = Math.min(1, Math.max(0, Number(this.audioBass) || 0));
+    const mid = Math.min(1, Math.max(0, Number(this.audioMid) || 0));
+    const treble = Math.min(1, Math.max(0, Number(this.audioTreble) || 0));
+    const sensitivity = Number(this.settings.audioReactiveSensitivity);
+    // Audio bloom follows the existing ambient Spread control.
+    const expansion = Number(this.settings.spread) / 17;
+    const visual = audioVisuals(
+      {
+        level,
+        left: leftLevel,
+        right: rightLevel,
+        bass,
+        mid,
+        treble,
+        leftBass: this.audioLeftBass,
+        rightBass: this.audioRightBass,
+        leftTreble: this.audioLeftTreble,
+        rightTreble: this.audioRightTreble,
+        correlation: this.audioCorrelation,
+        transient: this.audioTransient,
+      },
+      {
+        sensitivity: Number.isFinite(sensitivity) ? sensitivity / 100 : 1,
+        expansion: Number.isFinite(expansion) ? expansion / 100 : 1,
+      }
+    );
+    this.updateAudioColors();
+
+    const enabled = {
+      left: this.settings.directionLeftEnabled,
+      right: this.settings.directionRightEnabled,
+      top: this.settings.directionTopEnabled,
+      bottom: this.settings.directionBottomEnabled,
+    };
+    const detectedEdges = Object.values(this.audioGlowColors || {}).filter(Boolean);
+    const fallbackColor = detectedEdges.length
+      ? [
+          Math.round(detectedEdges.reduce((s, c) => s + c[0], 0) / detectedEdges.length),
+          Math.round(detectedEdges.reduce((s, c) => s + c[1], 0) / detectedEdges.length),
+          Math.round(detectedEdges.reduce((s, c) => s + c[2], 0) / detectedEdges.length),
+        ]
+      : [255, 255, 255];
+
+    for (const edge of Object.keys(this.audioGlowElems)) {
+      const elem = this.audioGlowElems[edge];
+      const color = this.audioGlowColors?.[edge] || fallbackColor;
+      const amount = visual.spread[edge];
+      if (!enabled[edge] || !amount) {
+        elem.style.opacity = '0';
+        continue;
+      }
+      elem.style.setProperty('--ytal-glow-color', `rgb(${color.join(', ')})`);
+      elem.style.setProperty('--ytal-glow-spread', String(Math.min(2.5, amount)));
+      elem.style.setProperty('--ytal-glow-scale', String(1 + Math.min(2.5, amount * 1.5)));
+      elem.style.opacity = String(Math.min(1, visual.gate * (0.35 + Math.min(0.65, amount * 0.75))));
+    }
+  };
+
+  // Samples a tiny copy of the current video frame at most 10 times per second.
+  updateAudioColors = () => {
+    if (this.audioColorSampleBlocked) return;
+    const now = performance.now();
+    if (now - (this.audioColorSampleTime || 0) < 100) return;
+    this.audioColorSampleTime = now;
+    if (!this.getImageDataAllowed) this.audioGlowColors = {};
+    if (
+      !this.settings.enabled ||
+      !this.getImageDataAllowed ||
+      document.visibilityState !== 'visible' ||
+      this.isHidden ||
+      this.videoIsHidden ||
+      !this.videoElem ||
+      this.videoElem.paused ||
+      this.videoElem.ended ||
+      !this.videoElem.videoWidth ||
+      !this.videoElem.videoHeight
+    )
+      return;
+
+    try {
+      if (!this.audioColorCanvas) this.audioColorCanvas = new Canvas(32, 18);
+      const ctx = this.audioColorCanvas.getContext('2d', {
+        ...ctxOptions,
+        willReadFrequently: true,
+      });
+      ctx.drawImage(
+        this.vrVideoElem ?? this.videoElem,
+        0,
+        0,
+        this.audioColorCanvas.width,
+        this.audioColorCanvas.height
+      );
+      const { width, height } = this.audioColorCanvas;
+      this.audioGlowColors =
+        sampleEdgeColors(
+          ctx.getImageData(0, 0, width, height).data,
+          width,
+          height,
+          this.barsClip
+        ) ?? {};
+    } catch {
+      // Tainted canvas (cross origin video): stop sampling and drop stale colors.
+      this.audioColorSampleBlocked = true;
+      this.audioGlowColors = {};
+    }
+  };
+
+  clearAudioVisuals = () => {
+    if (!this.audioGlowElems) return;
+    for (const elem of Object.values(this.audioGlowElems)) {
+      elem.style.opacity = '0';
+    }
+    this.audioGlowColors = {};
   };
 
   setAudioPlayback = (playing) => {
@@ -743,6 +876,15 @@ Video ready state: ${readyStateToString(videoElem?.readyState)}`);
       this.audioLevel = 0;
       this.audioLeft = 0;
       this.audioRight = 0;
+      this.audioBass = 0;
+      this.audioMid = 0;
+      this.audioTreble = 0;
+      this.audioLeftBass = 0;
+      this.audioRightBass = 0;
+      this.audioLeftTreble = 0;
+      this.audioRightTreble = 0;
+      this.audioCorrelation = 1;
+      this.audioTransient = 0;
       this.updateAudioVisuals();
       this.updateSizes().catch(() => {});
     }
@@ -1300,6 +1442,17 @@ Video ready state: ${readyStateToString(videoElem?.readyState)}`);
     this.projectorListElem.classList.add('ambientlight__projector-list');
     this.projectorsElem.prepend(this.projectorListElem);
 
+    this.audioGlowElems = {};
+    for (const edge of ['left', 'right', 'top', 'bottom']) {
+      const elem = document.createElement('div');
+      elem.classList.add(
+        'ambientlight__audio-glow',
+        `ambientlight__audio-glow--${edge}`
+      );
+      this.projectorsElem.append(elem);
+      this.audioGlowElems[edge] = elem;
+    }
+
     this.appendElemToContentElem();
 
     await this.initProjector();
@@ -1587,6 +1740,7 @@ Video ready state: ${readyStateToString(videoElem?.readyState)}`);
 
   clear() {
     this.clearTime = performance.now();
+    this.clearAudioVisuals();
     this.barDetection.clear();
 
     // Clear canvasses
@@ -1954,6 +2108,7 @@ Video ready state: ${readyStateToString(videoElem?.readyState)}`);
       scale(${this.clippedVideoScale[0]}, ${this.clippedVideoScale[1]})
     `;
     if (this.settings.webGL) this.projector.cropped = false;
+    this.updateAudioVisuals();
 
     if (
       this.settings.videoShadowOpacity != 0 &&
@@ -1986,9 +2141,8 @@ Video ready state: ${readyStateToString(videoElem?.readyState)}`);
       this.settings.contrast +
       (this.isHdr ? this.settings.hdrContrast - 100 : 0);
     const brightness =
-      (this.settings.brightness +
-        (this.isHdr ? this.settings.hdrBrightness - 100 : 0)) *
-      (this.settings.audioReactive ? modulation(this.audioLevel || 0, 120) / 100 : 1);
+      this.settings.brightness +
+      (this.isHdr ? this.settings.hdrBrightness - 100 : 0);
     const saturation =
       this.settings.saturation +
       (this.isHdr ? this.settings.hdrSaturation - 100 : 0);

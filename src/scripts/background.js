@@ -1,4 +1,4 @@
-import { getBrowser, getFeedbackFormLink } from './libs/utils';
+import { getBrowser } from './libs/utils';
 
 const DEBUG_AUDIO = true;
 const debug = (...args) => DEBUG_AUDIO && console.log('[audio-reactive]', ...args);
@@ -38,7 +38,23 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (message.type === 'audio-reactive-stop') { stop().then(() => reply({ ok: true })); return true; }
   if (message.type === 'audio-reactive-heartbeat' && sender.tab?.id === capture.tabId) { chrome.runtime.sendMessage(message); return false; }
   if (message.type === 'audio-reactive-playback' && sender.tab?.id === capture.tabId) { chrome.runtime.sendMessage(message); return false; }
-  if (message.type === 'audio-reactive-offscreen-level' && message.tabId === capture.tabId) { chrome.tabs.sendMessage(capture.tabId, { type: 'audio-reactive-level', level: message.level }).catch((error) => debug('level delivery failed', error.message)); }
+  if (message.type === 'audio-reactive-offscreen-level' && message.tabId === capture.tabId) {
+    chrome.tabs.sendMessage(capture.tabId, {
+      type: 'audio-reactive-level',
+      level: message.level,
+      left: message.left,
+      right: message.right,
+      bass: message.bass,
+      mid: message.mid,
+      treble: message.treble,
+      leftBass: message.leftBass,
+      rightBass: message.rightBass,
+      leftTreble: message.leftTreble,
+      rightTreble: message.rightTreble,
+      correlation: message.correlation,
+      transient: message.transient,
+    }).catch((error) => debug('level delivery failed', error.message));
+  }
   if (message.type === 'audio-reactive-offscreen-ended' && message.tabId === capture.tabId) stop();
   return false;
 });
@@ -46,7 +62,7 @@ chrome.tabs.onRemoved.addListener((id) => id === capture.tabId && stop(id));
 chrome.tabs.onUpdated.addListener((id, info) => id === capture.tabId && info.url && !youtube(info.url) && stop(id));
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason !== 'install' && details.reason !== 'update') return;
-  if (chrome.runtime.setUninstallURL) chrome.runtime.setUninstallURL(getFeedbackFormLink());
+  if (chrome.runtime.setUninstallURL) chrome.runtime.setUninstallURL('');
   if (details.reason === 'install' && getBrowser() === 'Firefox') chrome.runtime.openOptionsPage();
 });
 chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());

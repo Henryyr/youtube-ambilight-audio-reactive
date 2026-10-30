@@ -1437,15 +1437,78 @@ html[data-ambientlight-enabled] {
     display: none;
   }
 
-  .ambientlight__projectors {
-    transform: translateX(var(--ytal-audio-pan, 0%)) scale(var(--ytal-audio-scale, 1));
-    transform-origin: center;
-  }
-
   .ambientlight__projector {
     contain: strict;
     background: none; //Prevent black canvas edge lines on Firefox
     /* image-rendering: pixelated; */
+  }
+
+  // Soft, vivid radial glow around the video edges, driven by the audio channels.
+  .ambientlight__audio-glow {
+    position: absolute;
+    pointer-events: none;
+    opacity: 0;
+    mix-blend-mode: screen;
+    will-change: opacity, transform;
+    filter: blur(28px) saturate(1.5) brightness(1.25);
+    transition: opacity 80ms ease-out, transform 50ms ease-out;
+
+    &--left,
+    &--right {
+      width: 70%;
+      height: 120%;
+      top: -10%;
+    }
+    &--top,
+    &--bottom {
+      width: 120%;
+      height: 70%;
+      left: -10%;
+    }
+    &--left {
+      left: -70%;
+      transform-origin: right center;
+      transform: translateX(calc(var(--ytal-glow-spread, 0) * -35%)) scaleX(var(--ytal-glow-scale, 1)) scaleY(calc(1 + var(--ytal-glow-spread, 0) * 0.25));
+      background: radial-gradient(
+        ellipse at 100% 50%,
+        var(--ytal-glow-color, transparent) 0%,
+        var(--ytal-glow-color, transparent) 25%,
+        transparent 75%
+      );
+    }
+    &--right {
+      right: -70%;
+      transform-origin: left center;
+      transform: translateX(calc(var(--ytal-glow-spread, 0) * 35%)) scaleX(var(--ytal-glow-scale, 1)) scaleY(calc(1 + var(--ytal-glow-spread, 0) * 0.25));
+      background: radial-gradient(
+        ellipse at 0% 50%,
+        var(--ytal-glow-color, transparent) 0%,
+        var(--ytal-glow-color, transparent) 25%,
+        transparent 75%
+      );
+    }
+    &--top {
+      top: -70%;
+      transform-origin: center bottom;
+      transform: translateY(calc(var(--ytal-glow-spread, 0) * -35%)) scaleY(var(--ytal-glow-scale, 1)) scaleX(calc(1 + var(--ytal-glow-spread, 0) * 0.25));
+      background: radial-gradient(
+        ellipse at 50% 100%,
+        var(--ytal-glow-color, transparent) 0%,
+        var(--ytal-glow-color, transparent) 25%,
+        transparent 75%
+      );
+    }
+    &--bottom {
+      bottom: -70%;
+      transform-origin: center top;
+      transform: translateY(calc(var(--ytal-glow-spread, 0) * 35%)) scaleY(var(--ytal-glow-scale, 1)) scaleX(calc(1 + var(--ytal-glow-spread, 0) * 0.25));
+      background: radial-gradient(
+        ellipse at 50% 0%,
+        var(--ytal-glow-color, transparent) 0%,
+        var(--ytal-glow-color, transparent) 25%,
+        transparent 75%
+      );
+    }
   }
 
   // Has -20% performance impact

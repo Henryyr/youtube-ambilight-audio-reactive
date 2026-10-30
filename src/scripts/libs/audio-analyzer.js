@@ -24,3 +24,25 @@ export function analyzeBands(samples, sampleRate) {
     treble: average(4000, 16000),
   };
 }
+
+export function analyzeCorrelation(left, right) {
+  if (!left?.length || !right?.length) return 1;
+  let sumL2 = 0;
+  let sumR2 = 0;
+  let sumLR = 0;
+  const len = Math.min(left.length, right.length);
+  for (let i = 0; i < len; i++) {
+    const l = left[i] || 0;
+    const r = right[i] || 0;
+    sumLR += l * r;
+    sumL2 += l * l;
+    sumR2 += r * r;
+  }
+  const denom = Math.sqrt(sumL2 * sumR2);
+  return denom > 0.0001 ? Math.max(-1, Math.min(1, sumLR / denom)) : 1;
+}
+
+export function analyzeTransient(current, previous, threshold = 0.08) {
+  const diff = Math.max(0, (current || 0) - (previous || 0));
+  return diff > threshold ? Math.min(1, diff / 0.3) : 0;
+}

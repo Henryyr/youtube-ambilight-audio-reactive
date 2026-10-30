@@ -1251,6 +1251,7 @@ But if this happens frequently, here are some possible causes:
           if (
             [
               'videoOverlayEnabled',
+              'audioReactive',
               'detectVideoFillScaleEnabled',
               'directionTopEnabled',
               'directionRightEnabled',
@@ -1677,6 +1678,10 @@ But if this happens frequently, here are some possible causes:
         this.ambientlight.getImageDataAllowed &&
         (this.detectHorizontalBarSizeEnabled ||
           this.detectVerticalBarSizeEnabled),
+    },
+    {
+      names: ['audioReactiveSensitivity'],
+      visible: () => this.audioReactive,
     },
     {
       names: ['frameBlending'],

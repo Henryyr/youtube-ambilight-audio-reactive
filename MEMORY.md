@@ -1,0 +1,4 @@
+- [audio-modulation.js per-edge independence](audio-modulation.js-mod-per-edge-independence) — sensitivity and expansion parameters added
+- [content.scss removed orphaned audio-fallback](content.scss-removed-orphaned-audio-fallback) — cleaned up unused mask CSS
+- [settings-config.js moved audioReactive and added sliders](settings-configjs-added-sliders) — checkbox no longer Advanced-only; two new list settings
+- [settings.js wired visibility and persistence](settings-js-wired-visibility-persistence) — optionalSettings, controlledSettings updated
